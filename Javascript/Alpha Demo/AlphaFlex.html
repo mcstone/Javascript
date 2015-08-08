@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="en">
+<html>
+<head>
+	<meta charset="utf-8">
+	<title>Alpha Scaffold</title>
+	<script type="text/javascript" src="jquery-ui/external/jquery/jquery.js"></script>
+	<script type="text/javascript" src="colorpicker/farbtastic.js"></script>
+	<link rel="stylesheet" href="colorpicker/farbtastic.css" type="text/css" />
+	<link href="jquery-ui/jquery-ui.css" rel="stylesheet">
+	<script type="text/javascript"  src="jquery-ui/jquery-ui.js"></script>
+	<script type="text/javascript"  src="js/chroma.js"></script>
+	<script type="text/javascript"  src="js/d3.v3.js"></script>
+	<script type="text/javascript"  src="js/alphaStuff.js"></script>
+</head>
+<style>
+	body { 
+		font-family: Sans-Serif;
+	}
+	.flexH {
+		width: 80%;
+		height: auto;
+		display: flex;
+		flex-direction: row;
+	}
+
+	#picker {
+		width: 500;
+		display: inline-block;
+		margin-right: 15px;
+	}
+	#graph {
+		width: 90%;
+		height: 500px;
+		background-color: silver;
+		margin-top: 15px;
+	}
+	#pb-slider {
+		width: 200px;
+		margin-left: 10px;
+		display: inline-block;
+	}
+	.control-group {
+		display: inline-flex;
+		margin-right: 15px;
+		margin-bottom: 10px;
+	}
+	.hContainer {
+		display: flex;
+		flex-flow: row;
+	}
+	.g-vContainer {
+		display: flex;
+		flex-flow: column;
+		margin-left: 0px;
+	}
+	.g-topBox {
+		background-color: white;
+		outline-color: lightgray;
+		outline-width: 1px;
+		font-size: small;
+	}
+	.g-hContainer {
+		display: inline-flex;
+	}
+	.lSpace {
+		margin-left: 4px;
+	}
+	.vContainer {
+		display: flex;
+		flex-flow: column;
+		margin-left: 20px;
+	}
+	.smallText {
+		outline-width: 0px;
+		outline-color: white;
+		width: 30px;
+		margin-left: 3px;
+	}
+	#pb-slider .ui-slider-range {background: #b7b7b7;}
+	.ui-spinner {height: 20px; width: 50px}
+
+	</style>  
+	
+<script type="text/javascript" charset="utf-8">
+
+//This initializes the foreground colors
+var origGrays= ["#F7F7F7", "#F0F0F0", "#ACACAC", "#D7D7D7", "#DBDBDB", "#999999", "#7F7F7F", "#555555", "#B0B0B0", "#F2F2F2", "#E2E2E2"]
+
+var state = new Object()  //rather than globals, put it all here
+	state.alphaV = []	//alpha values
+	state.grayV = []	//gray on white
+	state.colorV = []	//color on current background
+	state.lumV = []		//luminance
+	state.crV = []	//contrast ratio
+	state.cmV = []	//michaelson contrast
+	state.fColor = chroma("black")
+	state.bColor= chroma("silver")  //a chroma color. Hex strings will always be called hex
+	state.powerBoost = 2
+	state.threshold = 0.31
+	state.luminance = state.bColor.luminance()
+	
+	
+//called by the colorpicker, indirectly by the hex text box	
+bkgUpdate = function(hex) {
+   $(".change-color").css("background-color", hex) //changes the background of the display area, also background textbox
+   $("#color-text").val(hex)
+   state.bColor = chroma(hex)
+   state.luminance = state.bColor.luminance().toPrecision(3)
+   $("#lum-text").val(state.luminance.toString())
+   fgUpdate()
+  }
+
+//this updates and draws the foreground objects. Procs are in alphaStuff.js
+fgUpdate = function() {
+	if (state.luminance> state.threshold){state.fColor = chroma("black")}
+    else {state.fColor = chroma("white")}
+	updateColorData(state)
+	d3.select("#graph").selectAll(".lumV-div").text(function(d,i) {return state.lumV[i].toPrecision(3)})
+	d3.select("#graph").selectAll(".crV-div").text(function(d,i) {return state.crV[i].toPrecision(3)})
+	d3.select("#graph").selectAll(".cmV-div").text(function(d,i) {return state.cmV[i].toPrecision(3)})
+	d3.select("#graph").selectAll(".cwV-div")
+		.text(function(d,i) {return weberContrast(state.lumV[i],state.bColor.luminance()).toPrecision(3)})
+	d3.select("#graph").selectAll("circle").style("fill", function(d,i) {return state.colorV[i].css()})
+
+	
+	/*g.empty() //clear the old values
+	var test = d3.selectAll(".g-topBox").selectAll("div")
+		.data(state.lumV)
+		.enter()
+		.append("div")
+		.text(function(d) {return d})*/
+	
+	
+	//var simpleSVG = d3.select("#graph")  //d3 object
+	//.append("svg")
+	//.attr("width", g.width())
+	//drawSamples(simpleSVG,colors)
+}
+
+initDisplay = function() {
+	initColorData(state, origGrays)
+	var g = $("#graph")	//g is a jQuery object
+	var w = g.width()/state.alphaV.length
+	var sw = w.toString()+"px"
+	var colDivs = d3.select("#graph").selectAll("div")  //array of d3 div objects?
+		.data(state.grayV)
+		.enter().append("div")
+		.attr("class","g-vContainer")
+		.style("width",sw)
+		.style("height",g.height().toString()+"px")
+		.append("div")
+		.attr("class","g-topBox")
+		.append("div").attr("class","grayV-div").text(function(d,i) {return d})
+	
+	d3.select("#graph").selectAll(".g-vContainer")
+		.append("div")
+		.attr("class","g-graphics")
+		.append("svg")
+		.append("circle")
+		.attr("r", 25)
+		.attr("cx", 28)
+		.attr("cy", 28)
+	
+	
+	d3.select("#graph").selectAll(".g-topBox")
+		.append("div").attr("class","g-hContainer").text("alpha")
+		.append("div").attr("class","alphaV-div lSpace").text(function(d,i) {return state.alphaV[i]})
+	d3.select("#graph").selectAll(".g-topBox")
+		.append("div").attr("class","g-hContainer").text("lum")
+		.append("div").attr("class","lumV-div lSpace").text(function(d,i) {return state.lumV[i].toPrecision(3)})
+	d3.select("#graph").selectAll(".g-topBox")
+		.append("div").attr("class","g-hContainer").text("CR")
+		.append("div").attr("class","crV-div lSpace").text(function(d,i) {return state.crV[i].toPrecision(4)})
+	d3.select("#graph").selectAll(".g-topBox")
+		.append("div").attr("class","g-hContainer").text("CM")
+		.append("div").attr("class","cmV-div lSpace").text(function(d,i) {return state.cmV[i].toPrecision(3)})
+	d3.select("#graph").selectAll(".g-topBox")
+		.append("div").attr("class","g-hContainer").text("CW")
+		.append("div").attr("class","cwV-div lSpace")
+		.text(function(d,i) {return weberContrast(state.lumV[i],state.bColor.luminance()).toPrecision(3)})
+	fgUpdate()
+}	
+		 
+updateSlider = function() {
+	 var sv = $("#pb-slider").slider("option", "value")
+	 $("#pb-text").val(sv)
+	 state.powerBoost = sv
+}
+$(document).ready(function() {
+    $('#demo').hide();
+    $('#picker').farbtastic('#color-text');
+    var f = $.farbtastic('#picker'); //selects the farbtastic object
+    f.linkTo(bkgUpdate)
+	f.setColor(state.bColor.hex())
+	$( "#pb-slider" ).slider({
+		range: "min",
+		value: 2.0,
+		min: 1,
+		max: 3,
+		step: 0.1,
+		slide: updateSlider,
+		change: updateSlider
+	})
+	$("#thresh-text").val(state.threshold.toString())
+	$("#pb-text").keypress(function(event) {
+        if (event.keyCode == 13) {
+            var sv= $("#pb-text").val()
+			$("#pb-slider").slider("option", "value", sv)
+			state.powerBoost = sv
+			fgUpdate()
+        }
+    })
+	$("#thresh-text").keypress(function(event) {
+        if (event.keyCode == 13) {
+            state.threshold= Number($("#thresh-text").val())
+			fgUpdate()
+        }
+    })
+	$("#color-text").keypress(function(event) {
+		if (event.keyCode == 13) {
+            var v= $("#color-text").val()
+			$.farbtastic('#picker').setColor(v)  //calls bgUpdate()
+		}
+	})
+	initDisplay()
+  });
+	
+
+
+ </script>
+</head>
+<body>
+<h2>Exploring alpha and contrast</h2>
+<div class="hContainer">
+
+    <div id="picker"></div>
+	<div class = "vContainer" >
+		<div class = "control-group">
+			<div style="width: 140px;">Background Color: </div>
+			<input type="text" class = "smallText" id="color-text" name="color-text" style = "width: 60px;"/></div>
+		<div class="control-group"> 
+			<div style="width: 140px;">Luminance:</div>
+			<input type="text" id="lum-text" name="lum-text" class = "smallText" style = "width: 60px;"/>
+		</div>
+	</div>
+	<div class = "vContainer" >
+		<div class = "control-group">
+			Power Boost: 
+			<input type = "text" id="pb-text" name = "pb-text" value="2" class = "smallText" />
+			<div id="pb-slider"> </div>
+		</div> 
+		<div class = "control-group">
+			Threshold: 
+			<input type = "text" id="thresh-text" class = "smallText" />
+		</div> 
+	</div>
+</div>
+<div id = "graph" class = "change-color hContainer" >
+</div>
+</body>
+</html>
+
+<!-- Created by <a href="http://www.acko.net/">Steven Wittens</a>.-->
